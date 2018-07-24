@@ -56,6 +56,8 @@
     <Compile Include="Entities\DetailedDecision.cs" />
     <Compile Include="Entities\Device.cs" />
     <Compile Include="Entities\DigitalAuthenticationResult.cs" />
+    <Compile Include="Entities\DocumentAuthenticationResult.cs" />
+    <Compile Include="Entities\DocumentAuthenticationStatus.cs" />
     <Compile Include="Entities\Email.cs" />
     <Compile Include="Entities\Fulfilment.cs" />
     <Compile Include="Entities\KBAResult.cs" />

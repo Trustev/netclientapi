@@ -11,5 +11,7 @@
         public OTPResult OTP { get; set; }
 
         public KBAResult KBA { get; set; }
+
+        public DocumentAuthenticationResult DocumentAuthentication { get; set; }
     }
 }
