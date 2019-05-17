@@ -2,7 +2,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2011/08/nuspec.xsd">
     <metadata>
         <id>Trustev</id>
-        <version>1.0.29</version>
+        <version>1.0.30</version>
         <title>Trustev Api Client</title>
         <authors>Trustev</authors>
         <owners>Trustev</owners>
@@ -11,7 +11,7 @@
         <iconUrl>https://app.trustev.com/assets/img/apple-icon-144.png</iconUrl>
         <requireLicenseAcceptance>false</requireLicenseAcceptance>
         <description>This is the Trustev Client which provides a set of classes and methods which can be used to integrate to the Trustev Platform.</description>
-        <releaseNotes>Fixed Token reuse method to respect token expiry conditions</releaseNotes>
+        <releaseNotes>Update payment types to include new payment methods</releaseNotes>
         <copyright>Copyright 2018</copyright>
         <tags>Trustev trustev api client</tags>
         <dependencies>
