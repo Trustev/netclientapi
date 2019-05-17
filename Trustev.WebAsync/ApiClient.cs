@@ -53,6 +53,20 @@ namespace Trustev.WebAsync
         }
 
         /// <summary>
+        ///Token CredentialType
+        /// </summary>
+        public static int? CredentialType
+        {
+            get
+            {
+                lock (TokenLock)
+                {
+                    return _token?.CredentialType;
+                }
+            }
+        }
+
+        /// <summary>
         /// Token Expiry DateTime
         /// </summary>
         public static DateTime? ExpireAt
@@ -73,7 +87,7 @@ namespace Trustev.WebAsync
                 }
             }
         }
-        
+
         /// <summary>
         /// Cached token object, contains APIToken and ExpireAt
         /// </summary>
@@ -91,9 +105,9 @@ namespace Trustev.WebAsync
         /// <summary>
         /// Determines whether or not a new token will be generated on each request. Defaults to false unless otherwise specified.
         /// </summary>
-        private static Boolean RegenerateTokenOnEachRequest { get; set; }= false;
+        private static Boolean RegenerateTokenOnEachRequest { get; set; } = false;
 
-    
+
         static ApiClient()
         {
             UserName = "";
@@ -776,7 +790,7 @@ namespace Trustev.WebAsync
         /// <param name="caseId">The Case Id of a Case</param>
         /// <param name="kbaResult">Your KBA Answers which you want to post</param>
         /// <returns></returns>
-        public static async Task<KBAResult> PostKBAResultAsync (string caseId, KBAResult kbaResult)
+        public static async Task<KBAResult> PostKBAResultAsync(string caseId, KBAResult kbaResult)
         {
             string uri = string.Format(Constants.UriKBAResultPost, BaseUrl, caseId);
 
@@ -861,7 +875,7 @@ namespace Trustev.WebAsync
             return JsonConvert.DeserializeObject<T>(resultstring, jss);
         }
 
-        
+
         /// <summary>
         /// Gets value of APIToken.
         /// Determins whether or not to generate a token on each request or reuse the current one if
@@ -873,7 +887,7 @@ namespace Trustev.WebAsync
         {
             if (!RegenerateTokenOnEachRequest)
             {
-                if (string.IsNullOrEmpty(ApiToken) || ExpireAt  == null || ExpireAt.Value <= DateTime.UtcNow)
+                if (string.IsNullOrEmpty(ApiToken) || ExpireAt == null || ExpireAt.Value <= DateTime.UtcNow)
                 {
                     await SetTokenAsync();
                 }
@@ -981,6 +995,8 @@ namespace Trustev.WebAsync
         private class TokenResponse
         {
             public string APIToken { get; set; }
+
+            public int CredentialType { get; set; }
 
             public DateTime ExpireAt { get; set; }
         }
