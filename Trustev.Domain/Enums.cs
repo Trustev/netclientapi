@@ -307,7 +307,8 @@ namespace Trustev.Domain
             Default,
             AccountCreation = 2,
             Application,
-            ADR
+            ADR,
+            Login
         }
 
         public enum SessionType
