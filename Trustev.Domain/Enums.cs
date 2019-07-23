@@ -304,11 +304,11 @@ namespace Trustev.Domain
 
         public enum CaseType
         {
-            Default,
+            Default=0,
+            AccountLogin=1,
             AccountCreation = 2,
-            Application,
-            ADR,
-            Login
+            Application=3,
+            ADR=4
         }
 
         public enum SessionType
