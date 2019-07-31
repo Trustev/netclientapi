@@ -54,6 +54,7 @@
   <ItemGroup>
     <Compile Include="ApiClient.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="SiteCredentials.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
