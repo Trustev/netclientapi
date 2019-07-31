@@ -57,6 +57,7 @@
     <Compile Include="AsyncTests\CustomerAddressTestsAsync.cs" />
     <Compile Include="AsyncTests\CustomerEmailTestsAsync.cs" />
     <Compile Include="AsyncTests\CustomerTestsAsync.cs" />
+    <Compile Include="AsyncTests\DecisionMultipleCredentialsTests.cs" />
     <Compile Include="AsyncTests\DecisionTestsAsync.cs" />
     <Compile Include="AsyncTests\CaseStatusTestsAsync.cs" />
     <Compile Include="AsyncTests\DetailedDecisionTestsAsync.cs" />
