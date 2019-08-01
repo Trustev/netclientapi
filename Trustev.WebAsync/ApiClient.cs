@@ -961,7 +961,7 @@ namespace Trustev.WebAsync
             return JsonConvert.DeserializeObject<T>(resultstring, jss);
         }
 
-        #region Private Methods
+
         /// <summary>
         /// Gets value of APIToken.
         /// Determins whether or not to generate a token on each request or reuse the current one if
@@ -1019,6 +1019,7 @@ namespace Trustev.WebAsync
             AddOrUpdateToken(userName, response);
         }
 
+        #region Private Methods
         /// <summary>
         /// Check that the user has set the TrustevClient Credentials correctly
         /// </summary>
@@ -1100,7 +1101,9 @@ namespace Trustev.WebAsync
         {
             public string APIToken { get; set; }
 
-            public DateTime? ExpireAt { get; set; }
+            public int CredentialType { get; set; }
+
+            public DateTime ExpireAt { get; set; }
         }
 
         /// <summary>

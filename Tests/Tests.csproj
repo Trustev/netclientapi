@@ -65,6 +65,7 @@
     <Compile Include="AsyncTests\PaymentTestsAsync.cs" />
     <Compile Include="AsyncTests\SessionTestsAsync.cs" />
     <Compile Include="AsyncTests\TestBase.cs" />
+    <Compile Include="AsyncTests\TokenTestsAsync.cs" />
     <Compile Include="AsyncTests\TransactionAddressTestsAsync.cs" />
     <Compile Include="AsyncTests\TransactionItemTestsAsync.cs" />
     <Compile Include="AsyncTests\TransactionTestsAsync.cs" />
