@@ -68,15 +68,6 @@ namespace Trustev.WebAsync
                 {
                     token =  Tokens[userName];
                 }
-                else
-                {
-                    // Backwards compatability - when the userName is not supplied, then we use the first.
-                    if (Tokens.Count > 0)
-                    {
-                        var key = Tokens.Keys.ToList().FirstOrDefault();
-                        token = Tokens[key];
-                    }
-                }
             }
             return token;
         }
@@ -142,7 +133,7 @@ namespace Trustev.WebAsync
         /// </summary>
         /// <param name="username">The user name associated with this token</param>
         /// <param name="tokenResponse">the token response, that was retrieved from the API</param>
-        private static void AddOrUpdateToken(string username, TokenResponse tokenResponse)
+        public static void AddOrUpdateToken(string username, TokenResponse tokenResponse)
         {
             lock (CredentialsLock)
             {
@@ -969,13 +960,13 @@ namespace Trustev.WebAsync
         /// </summary>
         /// <param name="regenerateToken"></param>
         /// <returns></returns>
-        private static async Task<string> GetTokenAsync(string userName)
+        public static async Task<string> GetTokenAsync(string userName = "")
         {
             var authenticationToken = GetApiToken(userName);
 
             if (!RegenerateTokenOnEachRequest)
             {
-                if (authenticationToken == null || string.IsNullOrEmpty(authenticationToken.APIToken) || authenticationToken.ExpireAt == null || authenticationToken.ExpireAt.Value >= DateTime.UtcNow)
+                if (authenticationToken == null || string.IsNullOrEmpty(authenticationToken.APIToken) || authenticationToken.ExpireAt == null || authenticationToken.ExpireAt < DateTime.UtcNow)
                 {
                     await SetTokenAsync(userName);
                 }
