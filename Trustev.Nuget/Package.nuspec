@@ -2,7 +2,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2011/08/nuspec.xsd">
     <metadata>
         <id>Trustev</id>
-        <version>1.0.28</version>
+        <version>1.1.0</version>
         <title>Trustev Api Client</title>
         <authors>Trustev</authors>
         <owners>Trustev</owners>
@@ -10,18 +10,16 @@
         <projectUrl>https://github.com/Trustev/netclientapi</projectUrl>
         <iconUrl>https://app.trustev.com/assets/img/apple-icon-144.png</iconUrl>
         <requireLicenseAcceptance>false</requireLicenseAcceptance>
-        <description>This is the Trustev Client which provides a set of classes and methods which can be used to integrate to the Trustev Platform.</description>
-        <releaseNotes>Updated API client to reuse API tokens by default.</releaseNotes>
-        <copyright>Copyright 2018</copyright>
+        <description>Core functions in C# for applications to use Trustev Platform, This is the Trustev Client which provides a set of classes and methods which can be used to integrate to the Trustev Platform.</description>
+        <releaseNotes>Add Support for multiple site credentials.</releaseNotes>
+        <copyright>Copyright 2019</copyright>
         <tags>Trustev trustev api client</tags>
         <dependencies>
-            <dependency id="Newtonsoft.Json" version="7.0.1" />
+            <dependency id="Newtonsoft.Json" version="12.0.2" />
         </dependencies>
     </metadata>
     <files>
-        <file src="..\Trustev.Domain\bin\Debug\Trustev.Domain.dll" target="lib\net45\Trustev.Domain.dll" />
-		<file src="..\Trustev.Domain\bin\Debug\Trustev.Domain.pdb" target="lib\net45\Trustev.Domain.pdb" />
-        <file src="..\Trustev.WebAsync\bin\Debug\Trustev.WebAsync.dll" target="lib\net45\Trustev.WebAsync.dll" />
-		<file src="..\Trustev.WebAsync\bin\Debug\Trustev.WebAsync.pdb" target="lib\net45\Trustev.WebAsync.pdb" />
+        <file src="..\Trustev.Domain\bin\Release\Trustev.Domain.dll" target="lib\net45\Trustev.Domain.dll" />
+        <file src="..\Trustev.WebAsync\bin\Release\Trustev.WebAsync.dll" target="lib\net45\Trustev.WebAsync.dll" />
     </files>
 </package>
