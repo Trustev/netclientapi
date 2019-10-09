@@ -161,7 +161,7 @@ We provide similar functions i.e. Post, Update and Get for every Sub Entity of t
 For more examples of these, check out the unit tests.
 
 
-### Multiple Site Credentials Trustev Integration
+### Multiple Site Credentials Trustev Integration - Valid as of version update 1.1.1
 This is simple version of the Trustev Integration and involves 4 simple steps:
 ```c#
 
@@ -179,7 +179,7 @@ ApiClient.SetUp(userName, password, secret, baseURL);
 //					and transferred server-side
 // 		CaseNumber : This is a number that you use to uniquely identify this case. It must
 //					 be unique.
-Case kase = new Case(sessionId, caseNumber);
+Case kase = new Case(sessionId, caseNumber, userName);
 
 // Now add any further information you have. The more you give us, the more accurate 
 // our decisions.
