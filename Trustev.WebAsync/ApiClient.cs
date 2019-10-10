@@ -1,8 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Reflection;
+using System.Runtime.Serialization.Formatters.Binary;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
@@ -19,16 +22,19 @@ namespace Trustev.WebAsync
     /// </summary>
     public static class ApiClient
     {
-        private static string UserName { get; set; }
+        /// <summary>
+        /// List of credentials - The key will be the user name
+        /// </summary>
+        private static IDictionary<string, SiteCredential> Credentials = new Dictionary<string, SiteCredential>();
 
-        private static string Password { get; set; }
-
-        private static string Secret { get; set; }
-
-        internal static string PublicKey { get; set; }
-
+        /// <summary>
+        /// Base url used to connect to Trustev Api
+        /// </summary>
         private static string BaseUrl { get; set; }
 
+        /// <summary>
+        /// Request Timeout
+        /// </summary>
         internal static int HttpRequestTimeout { get; set; }
 
         /// <summary>
@@ -36,68 +42,108 @@ namespace Trustev.WebAsync
         /// </summary>
         private static readonly object TokenLock = new object();
 
-        private static TokenResponse _token = null;
+        /// <summary>
+        /// Credentials Lock
+        /// </summary>
+        private static readonly object CredentialsLock = new object();
 
         /// <summary>
-        ///API auth token
+        /// Token
         /// </summary>
-        public static string ApiToken
+        private static IDictionary<string, TokenResponse> Tokens = new Dictionary<string, TokenResponse>();
+
+        /// <summary>
+        /// Gets an API AUth token
+        /// </summary>
+        /// <param name="userName">Optional: The user name, needed to support multiple creds, if only one set of creds is used this parameter is not needed</param>
+        /// <remarks>
+        /// When the username is left empty or null it will retrieve the first token in the list
+        /// </remarks>
+        private static TokenResponse GetApiToken(string userName = "")
         {
-            get
+            TokenResponse token = null;
+            lock (TokenLock)
             {
-                lock (TokenLock)
+                if (Tokens.ContainsKey(userName))
                 {
-                    return _token?.APIToken;
+                    token =  Tokens[userName];
+                }
+            }
+            return token;
+        }
+
+        /// <summary>
+        /// Gets the credentials
+        /// <param name="userName">Required: The user name, needed to support multiple creds, if only one set of creds is used this parameter is not needed</param>
+        /// </summary>
+        private static SiteCredential GetCredential(string userName)
+        {
+            SiteCredential siteCredential = null;
+            lock (CredentialsLock)
+            {
+                if (Credentials.ContainsKey(userName))
+                {
+                    siteCredential = Credentials[userName];
+                }
+                else
+                {
+                    // Backwards compatability - when the userName is not supplied, then we use the first.
+                    if (Credentials.Count > 0)
+                    {
+                        var key = Credentials.Keys.ToList().FirstOrDefault();
+                        siteCredential = Credentials[key];
+                    }
+                }
+                if (siteCredential != null)
+                {
+                    // Clone th eobject for concurrency reasons
+                    return DeepClone(siteCredential);
+                }
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Gets the credentials
+        /// </summary>
+        private static void AddOrUpdate(string username, string password, string secret, string publicKey = "")
+        {
+            lock (CredentialsLock)
+            {
+                var credential = new SiteCredential()
+                {
+                    UserName = username,
+                    Password = password,
+                    PublicKey = publicKey,
+                    Secret = secret
+                };
+                if (Credentials.ContainsKey(username))
+                {
+                    Credentials[username] = credential;
+                }
+                else
+                {
+                    Credentials.Add(username, credential);
                 }
             }
         }
 
         /// <summary>
-        ///Token CredentialType
+        /// Adds or updates a token
         /// </summary>
-        public static int? CredentialType
+        /// <param name="username">The user name associated with this token</param>
+        /// <param name="tokenResponse">the token response, that was retrieved from the API</param>
+        public static void AddOrUpdateToken(string username, TokenResponse tokenResponse)
         {
-            get
+            lock (CredentialsLock)
             {
-                lock (TokenLock)
+                if (Tokens.ContainsKey(username))
                 {
-                    return _token?.CredentialType;
+                    Tokens[username] = tokenResponse;
                 }
-            }
-        }
-
-        /// <summary>
-        /// Token Expiry DateTime
-        /// </summary>
-        public static DateTime? ExpireAt
-        {
-            get
-            {
-                lock (TokenLock)
+                else
                 {
-                    return _token?.ExpireAt;
-                }
-            }
-
-            set
-            {
-                lock (TokenLock)
-                {
-                    _token.ExpireAt = (DateTime)value;
-                }
-            }
-        }
-
-        /// <summary>
-        /// Cached token object, contains APIToken and ExpireAt
-        /// </summary>
-        private static TokenResponse CachedToken
-        {
-            set
-            {
-                lock (TokenLock)
-                {
-                    _token = value;
+                    Tokens.Add(username, tokenResponse);
                 }
             }
         }
@@ -110,10 +156,7 @@ namespace Trustev.WebAsync
 
         static ApiClient()
         {
-            UserName = "";
-            Password = "";
-            Secret = "";
-            BaseUrl = "";
+
         }
 
         /// <summary>
@@ -127,9 +170,7 @@ namespace Trustev.WebAsync
         /// <param name="httpRequestTimeout">The timeout value of this http request in milliseconds</param>
         public static void SetUp(string userName, string password, string secret, Enums.BaseUrl baseUrl, Boolean regenerateToken = false, int httpRequestTimeout = 15000)
         {
-            UserName = userName;
-            Password = password;
-            Secret = secret;
+            AddOrUpdate(userName, password, secret);
             if (baseUrl.Equals(Enums.BaseUrl.EU))
             {
                 BaseUrl = "https://app-eu.trustev.com/api/v2.0";
@@ -154,10 +195,7 @@ namespace Trustev.WebAsync
         /// <param name="httpRequestTimeout">The timeout value of this http request in milliseconds</param>
         public static void SetUp(string userName, string password, string secret, string publicKey, Enums.BaseUrl baseUrl, Boolean regenerateToken = false, int httpRequestTimeout = 15000)
         {
-            UserName = userName;
-            Password = password;
-            Secret = secret;
-            PublicKey = publicKey;
+            AddOrUpdate(userName, password, secret, publicKey);
 
             if (baseUrl.Equals(Enums.BaseUrl.EU))
             {
@@ -182,9 +220,8 @@ namespace Trustev.WebAsync
         /// <param name="httpRequestTimeout">Your default httpRequestTimeout</param>
         public static void SetUp(string userName, string password, string secret, string baseUrl, Boolean regenerateToken = false, int httpRequestTimeout = 15000)
         {
-            UserName = userName;
-            Password = password;
-            Secret = secret;
+            AddOrUpdate(userName, password, secret);
+
             BaseUrl = baseUrl;
             RegenerateTokenOnEachRequest = regenerateToken;
             HttpRequestTimeout = httpRequestTimeout;
@@ -202,10 +239,7 @@ namespace Trustev.WebAsync
         /// <param name="httpRequestTimeout">Your default httpRequestTimeout</param>
         public static void SetUp(string userName, string password, string secret, string publicKey, string baseUrl, Boolean regenerateToken = false, int httpRequestTimeout = 15000)
         {
-            UserName = userName;
-            Password = password;
-            PublicKey = publicKey;
-            Secret = secret;
+            AddOrUpdate(userName, password, secret, publicKey);
             BaseUrl = baseUrl;
             RegenerateTokenOnEachRequest = regenerateToken;
             HttpRequestTimeout = httpRequestTimeout;
@@ -215,12 +249,13 @@ namespace Trustev.WebAsync
         /// Post your Case to the TrustevClient Api
         /// </summary>
         /// <param name="session">Your Session which you want to post</param>
+        /// <param name="userName">Optional: The user name, needed to support multiple creds, if only one set of creds is used this parameter is not needed</param>
         /// <returns>The Session along with the Id that TrustevClient have assigned it</returns>
-        public static async Task<Session> PostSessionAsync(Session session)
+        public static async Task<Session> PostSessionAsync(Session session, string userName = "")
         {
             string uri = string.Format(Constants.UriSessionPost, BaseUrl);
 
-            Session response = await PerformHttpCallAsync<Session>(uri, HttpMethod.Post, session, true, HttpRequestTimeout);
+            Session response = await PerformHttpCallAsync<Session>(uri, HttpMethod.Post, session, true, HttpRequestTimeout, userName);
 
             return response;
         }
@@ -230,12 +265,13 @@ namespace Trustev.WebAsync
         /// </summary>
         /// <param name="sessionId">The Id of the session you want to add the detail to. It comes back as part of the Session Post Response</param>
         /// <param name="detail">Your Detail which you want to post</param>
+        /// <param name="userName">Optional: The user name, needed to support multiple creds, if only one set of creds is used this parameter is not needed</param>
         /// <returns>The Session along with the Id that TrustevClient have assigned it</returns>
-        public static async Task<Detail> PostDetailAsync(Guid sessionId, Detail detail)
+        public static async Task<Detail> PostDetailAsync(Guid sessionId, Detail detail, string userName = "")
         {
             string uri = string.Format(Constants.UriDetailPost, BaseUrl, sessionId);
 
-            Detail response = await PerformHttpCallAsync<Detail>(uri, HttpMethod.Post, detail, true, HttpRequestTimeout);
+            Detail response = await PerformHttpCallAsync<Detail>(uri, HttpMethod.Post, detail, true, HttpRequestTimeout, userName);
 
             return response;
         }
@@ -244,12 +280,13 @@ namespace Trustev.WebAsync
         /// Post your Case to the TrustevClient Api asynchronously
         /// </summary>
         /// <param name="kase">Your Case which you want to post</param>
+        /// <param name="userName">Optional: The user name, needed to support multiple creds, if only one set of creds is used this parameter is not needed</param>
         /// <returns>The Case along with the Id that TrustevClient have assigned it</returns>
-        public static async Task<Case> PostCaseAsync(Case kase)
+        public static async Task<Case> PostCaseAsync(Case kase, string userName = "")
         {
             string uri = string.Format(Constants.UriCasePost, BaseUrl);
 
-            Case responseCase = await PerformHttpCallAsync<Case>(uri, HttpMethod.Post, kase, true, HttpRequestTimeout);
+            Case responseCase = await PerformHttpCallAsync<Case>(uri, HttpMethod.Post, kase, true, HttpRequestTimeout, userName);
 
             return responseCase;
         }
@@ -259,12 +296,13 @@ namespace Trustev.WebAsync
         /// </summary>
         /// <param name="kase">Your Case which you want to Put and update the existing case with</param>
         /// <param name="caseId">The Case Id of the case you want to update. TrustevClient will have assigned this Id and returned it in the response Case from the Case post Method</param>
+        /// <param name="userName">Optional: The user name, needed to support multiple creds, if only one set of creds is used this parameter is not needed</param>
         /// <returns></returns>
-        public static async Task<Case> UpdateCaseAsync(Case kase, string caseId)
+        public static async Task<Case> UpdateCaseAsync(Case kase, string caseId, string userName = "")
         {
             string uri = string.Format(Constants.UriCaseUpdate, BaseUrl, caseId);
 
-            Case response = await PerformHttpCallAsync<Case>(uri, HttpMethod.Put, kase, true, HttpRequestTimeout);
+            Case response = await PerformHttpCallAsync<Case>(uri, HttpMethod.Put, kase, true, HttpRequestTimeout, userName);
 
             return response;
         }
@@ -273,12 +311,13 @@ namespace Trustev.WebAsync
         /// Get the Case with the Id caseId
         /// </summary>
         /// <param name="caseId">The case Id of the Case you want to get. TrustevClient will have assigned this Id and returned it in the response Case from the Case post Method</param>
+        /// <param name="userName">Optional: The user name, needed to support multiple creds, if only one set of creds is used this parameter is not needed</param>
         /// <returns></returns>
-        public static async Task<Case> GetCaseAsync(string caseId)
+        public static async Task<Case> GetCaseAsync(string caseId, string userName = "")
         {
             string uri = string.Format(Constants.UriCaseGet, BaseUrl, caseId);
 
-            Case response = await PerformHttpCallAsync<Case>(uri, HttpMethod.Get, null, true, HttpRequestTimeout);
+            Case response = await PerformHttpCallAsync<Case>(uri, HttpMethod.Get, null, true, HttpRequestTimeout, userName);
 
             return response;
         }
@@ -287,12 +326,13 @@ namespace Trustev.WebAsync
         /// Get a Decision on a Case with Id caseId.
         /// </summary>
         /// <param name="caseId">The Id of a Case which you have already posted to the TrustevClient API.</param>
+        /// <param name="userName">Optional: The user name, needed to support multiple creds, if only one set of creds is used this parameter is not needed</param>
         /// <returns></returns>
-        public static async Task<Decision> GetDecisionAsync(string caseId)
+        public static async Task<Decision> GetDecisionAsync(string caseId, string userName = "")
         {
             string uri = string.Format(Constants.UriDecisionGet, BaseUrl, caseId);
 
-            Decision decision = await PerformHttpCallAsync<Decision>(uri, HttpMethod.Get, null, true, HttpRequestTimeout);
+            Decision decision = await PerformHttpCallAsync<Decision>(uri, HttpMethod.Get, null, true, HttpRequestTimeout, userName);
 
             decision.CaseId = caseId;
 
@@ -303,12 +343,13 @@ namespace Trustev.WebAsync
         /// Get a Detailed Decision on a Case with Id caseId.
         /// </summary>
         /// <param name="caseId">The Id of a Case which you have already posted to the TrustevClient API.</param>
+        /// <param name="userName">Optional: The user name, needed to support multiple creds, if only one set of creds is used this parameter is not needed</param>
         /// <returns></returns>
-        public static async Task<DetailedDecision> GetDetailedDecisionAsync(string caseId)
+        public static async Task<DetailedDecision> GetDetailedDecisionAsync(string caseId, string userName = "")
         {
             string uri = string.Format(Constants.UriDetailedDecisionGet, BaseUrl, caseId);
 
-            DetailedDecision detailedDecision = await PerformHttpCallAsync<DetailedDecision>(uri, HttpMethod.Get, null, true, HttpRequestTimeout);
+            DetailedDecision detailedDecision = await PerformHttpCallAsync<DetailedDecision>(uri, HttpMethod.Get, null, true, HttpRequestTimeout, userName);
 
             detailedDecision.CaseId = caseId;
 
@@ -324,13 +365,14 @@ namespace Trustev.WebAsync
         /// <param name="request">
         /// Status Request Object 
         /// </param>
+        /// <param name="userName">Optional: The user name, needed to support multiple creds, if only one set of creds is used this parameter is not needed</param>
         /// <returns>
         /// </returns>
-        public static async Task<OTPResult> PostOtpAsync(string caseId, OTPResult request)
+        public static async Task<OTPResult> PostOtpAsync(string caseId, OTPResult request, string userName = "")
         {
             var uri = string.Format(Constants.UriOtp, BaseUrl, caseId);
 
-            var digitalAuthenticationResult = await PerformHttpCallAsync<OTPResult>(uri, HttpMethod.Post, request, true, HttpRequestTimeout);
+            var digitalAuthenticationResult = await PerformHttpCallAsync<OTPResult>(uri, HttpMethod.Post, request, true, HttpRequestTimeout, userName);
             return digitalAuthenticationResult;
         }
 
@@ -343,13 +385,14 @@ namespace Trustev.WebAsync
         /// <param name="request">
         /// Status Request Object 
         /// </param>
+        /// <param name="userName">Optional: The user name, needed to support multiple creds, if only one set of creds is used this parameter is not needed</param>
         /// <returns>
         /// </returns>
-        public static async Task<OTPResult> PutOtpAsync(string caseId, OTPResult request)
+        public static async Task<OTPResult> PutOtpAsync(string caseId, OTPResult request, string userName = "")
         {
             var uri = string.Format(Constants.UriOtp, BaseUrl, caseId);
 
-            var digitalAuthenticationResult = await PerformHttpCallAsync<OTPResult>(uri, HttpMethod.Put, request, true, HttpRequestTimeout);
+            var digitalAuthenticationResult = await PerformHttpCallAsync<OTPResult>(uri, HttpMethod.Put, request, true, HttpRequestTimeout, userName);
             return digitalAuthenticationResult;
         }
 
@@ -358,12 +401,13 @@ namespace Trustev.WebAsync
         /// </summary>
         /// <param name="caseId">The Case Id of a Case which you have already posted</param>
         /// <param name="customer">Your Customer which you want to post</param>
+        /// <param name="userName">Optional: The user name, needed to support multiple creds, if only one set of creds is used this parameter is not needed</param>
         /// <returns>The Customer along with the Id that TrustevClient have assigned it</returns>
-        public static async Task<Customer> PostCustomerAsync(string caseId, Customer customer)
+        public static async Task<Customer> PostCustomerAsync(string caseId, Customer customer, string userName = "")
         {
             string uri = string.Format(Constants.UriCustomerPost, BaseUrl, caseId);
 
-            Customer response = await PerformHttpCallAsync<Customer>(uri, HttpMethod.Post, customer, true, HttpRequestTimeout);
+            Customer response = await PerformHttpCallAsync<Customer>(uri, HttpMethod.Post, customer, true, HttpRequestTimeout, userName);
 
             return response;
         }
@@ -373,12 +417,13 @@ namespace Trustev.WebAsync
         /// </summary>
         /// <param name="caseId">The Case Id of a Case which you have already posted</param>
         /// <param name="customer">Your Customer which you want to Put and update the existing Customer with</param>
+        /// <param name="userName">Optional: The user name, needed to support multiple creds, if only one set of creds is used this parameter is not needed</param>
         /// <returns></returns>
-        public static async Task<Customer> UpdateCustomerAsync(string caseId, Customer customer)
+        public static async Task<Customer> UpdateCustomerAsync(string caseId, Customer customer, string userName = "")
         {
             string uri = string.Format(Constants.UriCustomerUpdate, BaseUrl, caseId);
 
-            Customer response = await PerformHttpCallAsync<Customer>(uri, HttpMethod.Put, customer, true, HttpRequestTimeout);
+            Customer response = await PerformHttpCallAsync<Customer>(uri, HttpMethod.Put, customer, true, HttpRequestTimeout, userName);
 
             return response;
         }
@@ -387,12 +432,13 @@ namespace Trustev.WebAsync
         /// Get the Customer attached to the Case
         /// </summary>
         /// <param name="caseId">The case Id of the the Case with the Customer you want to get</param>
+        /// <param name="userName">Optional: The user name, needed to support multiple creds, if only one set of creds is used this parameter is not needed</param>
         /// <returns></returns>
-        public static async Task<Customer> GetCustomerAsync(string caseId)
+        public static async Task<Customer> GetCustomerAsync(string caseId, string userName = "")
         {
             string uri = string.Format(Constants.UriCustomerGet, BaseUrl, caseId);
 
-            Customer response = await PerformHttpCallAsync<Customer>(uri, HttpMethod.Get, null, true, HttpRequestTimeout);
+            Customer response = await PerformHttpCallAsync<Customer>(uri, HttpMethod.Get, null, true, HttpRequestTimeout, userName);
 
             return response;
         }
@@ -402,12 +448,13 @@ namespace Trustev.WebAsync
         /// </summary>
         /// <param name="caseId">The Case Id of a Case which you have already posted</param>
         /// <param name="transaction">Your Transaction which you want to post</param>
+        /// <param name="userName">Optional: The user name, needed to support multiple creds, if only one set of creds is used this parameter is not needed</param>
         /// <returns></returns>
-        public static async Task<Transaction> PostTransactionAsync(string caseId, Transaction transaction)
+        public static async Task<Transaction> PostTransactionAsync(string caseId, Transaction transaction, string userName = "")
         {
             string uri = string.Format(Constants.UriTransactionPost, BaseUrl, caseId);
 
-            Transaction response = await PerformHttpCallAsync<Transaction>(uri, HttpMethod.Post, transaction, true, HttpRequestTimeout);
+            Transaction response = await PerformHttpCallAsync<Transaction>(uri, HttpMethod.Post, transaction, true, HttpRequestTimeout, userName);
 
             return response;
         }
@@ -417,12 +464,13 @@ namespace Trustev.WebAsync
         /// </summary>
         /// <param name="caseId">The Case Id of a Case which you have already posted</param>
         /// <param name="transaction">Your Transaction which you want to Put and update the existing Transaction with</param>
+        /// <param name="userName">Optional: The user name, needed to support multiple creds, if only one set of creds is used this parameter is not needed</param>
         /// <returns></returns>
-        public static async Task<Transaction> UpdateTransactionAsync(string caseId, Transaction transaction)
+        public static async Task<Transaction> UpdateTransactionAsync(string caseId, Transaction transaction, string userName = "")
         {
             string uri = string.Format(Constants.UriTransactionUpdate, BaseUrl, caseId);
 
-            Transaction response = await PerformHttpCallAsync<Transaction>(uri, HttpMethod.Put, transaction, true, HttpRequestTimeout);
+            Transaction response = await PerformHttpCallAsync<Transaction>(uri, HttpMethod.Put, transaction, true, HttpRequestTimeout, userName);
 
             return response;
         }
@@ -431,12 +479,13 @@ namespace Trustev.WebAsync
         /// Get the Transaction attached to the Case
         /// </summary>
         /// <param name="caseId">The case Id of the the Case with the Transaction you want to get</param>
+        /// <param name="userName">Optional: The user name, needed to support multiple creds, if only one set of creds is used this parameter is not needed</param>
         /// <returns></returns>
-        public static async Task<Transaction> GetTransactionAsync(string caseId)
+        public static async Task<Transaction> GetTransactionAsync(string caseId, string userName = "")
         {
             string uri = string.Format(Constants.UriTransactionGet, BaseUrl, caseId);
 
-            Transaction response = await PerformHttpCallAsync<Transaction>(uri, HttpMethod.Get, null, true, HttpRequestTimeout);
+            Transaction response = await PerformHttpCallAsync<Transaction>(uri, HttpMethod.Get, null, true, HttpRequestTimeout, userName);
 
             return response;
         }
@@ -446,12 +495,13 @@ namespace Trustev.WebAsync
         /// </summary>
         /// <param name="caseId">The Case Id of a Case which you have already posted</param>
         /// <param name="caseStatus">Your CaseStatus which you want to post</param>
+        /// <param name="userName">Optional: The user name, needed to support multiple creds, if only one set of creds is used this parameter is not needed</param>
         /// <returns></returns>
-        public static async Task<CaseStatus> PostCaseStatusAsync(string caseId, CaseStatus caseStatus)
+        public static async Task<CaseStatus> PostCaseStatusAsync(string caseId, CaseStatus caseStatus, string userName = "")
         {
             string uri = string.Format(Constants.UriCaseStatusPost, BaseUrl, caseId);
 
-            CaseStatus response = await PerformHttpCallAsync<CaseStatus>(uri, HttpMethod.Post, caseStatus, true, HttpRequestTimeout);
+            CaseStatus response = await PerformHttpCallAsync<CaseStatus>(uri, HttpMethod.Post, caseStatus, true, HttpRequestTimeout, userName);
 
             return response;
         }
@@ -461,12 +511,13 @@ namespace Trustev.WebAsync
         /// </summary>
         /// <param name="caseId">The Case Id of a Case which you have already posted</param>
         /// <param name="caseStatusId">The Id of the CaseStatus you want to get</param>
+        /// <param name="userName">Optional: The user name, needed to support multiple creds, if only one set of creds is used this parameter is not needed</param>
         /// <returns></returns>
-        public static async Task<CaseStatus> GetCaseStatusAsync(string caseId, Guid caseStatusId)
+        public static async Task<CaseStatus> GetCaseStatusAsync(string caseId, Guid caseStatusId, string userName = "")
         {
             string uri = string.Format(Constants.UriCaseStatusGet, BaseUrl, caseId, caseStatusId);
 
-            CaseStatus response = await PerformHttpCallAsync<CaseStatus>(uri, HttpMethod.Get, null, true, HttpRequestTimeout);
+            CaseStatus response = await PerformHttpCallAsync<CaseStatus>(uri, HttpMethod.Get, null, true, HttpRequestTimeout, userName);
 
             return response;
         }
@@ -475,12 +526,13 @@ namespace Trustev.WebAsync
         /// Get a all the statuses from a Case
         /// </summary>
         /// <param name="caseId">The Case Id of a Case which you have already posted</param>
+        /// <param name="userName">Optional: The user name, needed to support multiple creds, if only one set of creds is used this parameter is not needed</param>
         /// <returns></returns>
-        public static async Task<IList<CaseStatus>> GetCaseStatusesAsync(string caseId)
+        public static async Task<IList<CaseStatus>> GetCaseStatusesAsync(string caseId, string userName = "")
         {
             string uri = string.Format(Constants.UriCaseStatusesGet, BaseUrl, caseId);
 
-            IList<CaseStatus> response = await PerformHttpCallAsync<IList<CaseStatus>>(uri, HttpMethod.Get, null, true, HttpRequestTimeout);
+            IList<CaseStatus> response = await PerformHttpCallAsync<IList<CaseStatus>>(uri, HttpMethod.Get, null, true, HttpRequestTimeout, userName);
 
             return response;
         }
@@ -490,12 +542,13 @@ namespace Trustev.WebAsync
         /// </summary>
         /// <param name="caseId">The Case Id of a Case with the Customer  which you have already posted</param>
         /// <param name="customerAddress">Your CustomerAddress which you want to post</param>
+        /// <param name="userName">Optional: The user name, needed to support multiple creds, if only one set of creds is used this parameter is not needed</param>
         /// <returns></returns>
-        public static async Task<CustomerAddress> PostCustomerAddressAsync(string caseId, CustomerAddress customerAddress)
+        public static async Task<CustomerAddress> PostCustomerAddressAsync(string caseId, CustomerAddress customerAddress, string userName = "")
         {
             string uri = string.Format(Constants.UriCustomerAddressPost, BaseUrl, caseId);
 
-            CustomerAddress response = await PerformHttpCallAsync<CustomerAddress>(uri, HttpMethod.Post, customerAddress, true, HttpRequestTimeout);
+            CustomerAddress response = await PerformHttpCallAsync<CustomerAddress>(uri, HttpMethod.Post, customerAddress, true, HttpRequestTimeout, userName);
 
             return response;
         }
@@ -505,12 +558,13 @@ namespace Trustev.WebAsync
         /// </summary><param name="caseId">The Case Id of a Case which you have already posted</param>
         /// <param name="customerAddress">The CustomerAddress you want to update the existing CustomerAddress to</param>
         /// <param name="customerAddressId">The id of the CustomerAddress you want to update</param>
+        /// <param name="userName">Optional: The user name, needed to support multiple creds, if only one set of creds is used this parameter is not needed</param>
         /// <returns></returns>
-        public static async Task<CustomerAddress> UpdateCustomerAddressAsync(string caseId, CustomerAddress customerAddress, Guid customerAddressId)
+        public static async Task<CustomerAddress> UpdateCustomerAddressAsync(string caseId, CustomerAddress customerAddress, Guid customerAddressId, string userName = "")
         {
             string uri = string.Format(Constants.UriCustomerAddressUpdate, BaseUrl, caseId, customerAddressId);
 
-            CustomerAddress response = await PerformHttpCallAsync<CustomerAddress>(uri, HttpMethod.Put, customerAddress, true, HttpRequestTimeout);
+            CustomerAddress response = await PerformHttpCallAsync<CustomerAddress>(uri, HttpMethod.Put, customerAddress, true, HttpRequestTimeout, userName);
 
             return response;
         }
@@ -520,12 +574,13 @@ namespace Trustev.WebAsync
         /// </summary>
         /// <param name="caseId">The Case Id of a Case with the Customer which you have already posted</param>
         /// <param name="customerAddressId">The Id of the CustomerAddress you want to get</param>
+        /// <param name="userName">Optional: The user name, needed to support multiple creds, if only one set of creds is used this parameter is not needed</param>
         /// <returns></returns>
-        public static async Task<CustomerAddress> GetCustomerAddressAsync(string caseId, Guid customerAddressId)
+        public static async Task<CustomerAddress> GetCustomerAddressAsync(string caseId, Guid customerAddressId, string userName = "")
         {
             string uri = string.Format(Constants.UriCustomerAddressGet, BaseUrl, caseId, customerAddressId);
 
-            CustomerAddress response = await PerformHttpCallAsync<CustomerAddress>(uri, HttpMethod.Get, null, true, HttpRequestTimeout);
+            CustomerAddress response = await PerformHttpCallAsync<CustomerAddress>(uri, HttpMethod.Get, null, true, HttpRequestTimeout, userName);
 
             return response;
         }
@@ -534,12 +589,13 @@ namespace Trustev.WebAsync
         /// Get a all the addresses from a Customer on a Case
         /// </summary>
         /// <param name="caseId">The Case Id of a Case with the Customer  which you have already posted</param>
+        /// <param name="userName">Optional: The user name, needed to support multiple creds, if only one set of creds is used this parameter is not needed</param>
         /// <returns></returns>
-        public static async Task<IList<CustomerAddress>> GetCustomerAddressesAsync(string caseId)
+        public static async Task<IList<CustomerAddress>> GetCustomerAddressesAsync(string caseId, string userName = "")
         {
             string uri = string.Format(Constants.UriCustomerAddressesGet, BaseUrl, caseId);
 
-            IList<CustomerAddress> response = await PerformHttpCallAsync<IList<CustomerAddress>>(uri, HttpMethod.Get, null, true, HttpRequestTimeout);
+            IList<CustomerAddress> response = await PerformHttpCallAsync<IList<CustomerAddress>>(uri, HttpMethod.Get, null, true, HttpRequestTimeout, userName);
 
             return response;
         }
@@ -549,12 +605,13 @@ namespace Trustev.WebAsync
         /// </summary>
         /// <param name="caseId">The Case Id of a Case with the Customer which you have already posted</param>
         /// <param name="email">Your Customer Email which you want to post</param>
+        /// <param name="userName">Optional: The user name, needed to support multiple creds, if only one set of creds is used this parameter is not needed</param>
         /// <returns></returns>
-        public static async Task<Email> PostEmailAsync(string caseId, Email email)
+        public static async Task<Email> PostEmailAsync(string caseId, Email email, string userName = "")
         {
             string uri = string.Format(Constants.UriCustomerEmailPost, BaseUrl, caseId);
 
-            Email response = await PerformHttpCallAsync<Email>(uri, HttpMethod.Post, email, true, HttpRequestTimeout);
+            Email response = await PerformHttpCallAsync<Email>(uri, HttpMethod.Post, email, true, HttpRequestTimeout, userName);
 
             return response;
         }
@@ -565,12 +622,13 @@ namespace Trustev.WebAsync
         /// <param name="caseId">The Case Id of a Case which you have already posted</param>
         /// <param name="email">The Customer Email you want to update the existing Email to</param>
         /// <param name="emailId">The Id of the Email you want to update</param>
+        /// <param name="userName">Optional: The user name, needed to support multiple creds, if only one set of creds is used this parameter is not needed</param>
         /// <returns></returns>
-        public static async Task<Email> UpdateEmailAsync(string caseId, Email email, Guid emailId)
+        public static async Task<Email> UpdateEmailAsync(string caseId, Email email, Guid emailId, string userName = "")
         {
             string uri = string.Format(Constants.UriCustomerEmailUpdate, BaseUrl, caseId, emailId);
 
-            Email response = await PerformHttpCallAsync<Email>(uri, HttpMethod.Put, email, true, HttpRequestTimeout);
+            Email response = await PerformHttpCallAsync<Email>(uri, HttpMethod.Put, email, true, HttpRequestTimeout, userName);
 
             return response;
         }
@@ -580,12 +638,13 @@ namespace Trustev.WebAsync
         /// </summary>
         /// <param name="caseId">The Case Id of a Case with the Customer which you have already posted</param>
         /// <param name="emailId">The Id of the Email you want to get</param>
+        /// <param name="userName">Optional: The user name, needed to support multiple creds, if only one set of creds is used this parameter is not needed</param>
         /// <returns></returns>
-        public static async Task<Email> GetEmailAsync(string caseId, Guid emailId)
+        public static async Task<Email> GetEmailAsync(string caseId, Guid emailId, string userName = "")
         {
             string uri = string.Format(Constants.UriCustomerEmailGet, BaseUrl, caseId, emailId);
 
-            Email response = await PerformHttpCallAsync<Email>(uri, HttpMethod.Get, null, true, HttpRequestTimeout);
+            Email response = await PerformHttpCallAsync<Email>(uri, HttpMethod.Get, null, true, HttpRequestTimeout, userName);
 
             return response;
         }
@@ -594,12 +653,13 @@ namespace Trustev.WebAsync
         /// Get all the Customer Emails from a Case
         /// </summary>
         /// <param name="caseId">The Case Id of a Case with the Customer which you have already posted</param>
+        /// <param name="userName">Optional: The user name, needed to support multiple creds, if only one set of creds is used this parameter is not needed</param>
         /// <returns></returns>
-        public static async Task<IList<Email>> GetEmailsAsync(string caseId)
+        public static async Task<IList<Email>> GetEmailsAsync(string caseId, string userName = "")
         {
             string uri = string.Format(Constants.UriCustomerEmailsGet, BaseUrl, caseId);
 
-            IList<Email> response = await PerformHttpCallAsync<IList<Email>>(uri, HttpMethod.Get, null, true, HttpRequestTimeout);
+            IList<Email> response = await PerformHttpCallAsync<IList<Email>>(uri, HttpMethod.Get, null, true, HttpRequestTimeout, userName);
 
             return response;
         }
@@ -609,12 +669,13 @@ namespace Trustev.WebAsync
         /// </summary>
         /// <param name="caseId">The Case Id of a Case which you have already posted</param>
         /// <param name="payment">Your Payment which you want to post</param>
+        /// <param name="userName">Optional: The user name, needed to support multiple creds, if only one set of creds is used this parameter is not needed</param>
         /// <returns></returns>
-        public static async Task<Payment> PostPaymentAsync(string caseId, Payment payment)
+        public static async Task<Payment> PostPaymentAsync(string caseId, Payment payment, string userName = "")
         {
             string uri = string.Format(Constants.UriPaymentPost, BaseUrl, caseId);
 
-            Payment response = await PerformHttpCallAsync<Payment>(uri, HttpMethod.Post, payment, true, HttpRequestTimeout);
+            Payment response = await PerformHttpCallAsync<Payment>(uri, HttpMethod.Post, payment, true, HttpRequestTimeout, userName);
 
             return response;
         }
@@ -625,12 +686,13 @@ namespace Trustev.WebAsync
         /// <param name="caseId">The Case Id of a Case which you have already posted</param>
         /// <param name="payment">The Payment you want to update the existing Payment to</param>
         /// <param name="paymentId">The id of the Payment you want to update</param>
+        /// <param name="userName">Optional: The user name, needed to support multiple creds, if only one set of creds is used this parameter is not needed</param>
         /// <returns></returns>
-        public static async Task<Payment> UpdatePaymentAsync(string caseId, Payment payment, Guid paymentId)
+        public static async Task<Payment> UpdatePaymentAsync(string caseId, Payment payment, Guid paymentId, string userName = "")
         {
             string uri = string.Format(Constants.UriPaymentUpdate, BaseUrl, caseId, paymentId);
 
-            Payment response = await PerformHttpCallAsync<Payment>(uri, HttpMethod.Put, payment, true, HttpRequestTimeout);
+            Payment response = await PerformHttpCallAsync<Payment>(uri, HttpMethod.Put, payment, true, HttpRequestTimeout, userName);
 
             return response;
         }
@@ -640,12 +702,13 @@ namespace Trustev.WebAsync
         /// </summary>
         /// <param name="caseId">The Case Id of a Case which you have already posted</param>
         /// <param name="paymentId">The Id of the Payment you want to get</param>
+        /// <param name="userName">Optional: The user name, needed to support multiple creds, if only one set of creds is used this parameter is not needed</param>
         /// <returns></returns>
-        public static async Task<Payment> GetPaymentAsync(string caseId, Guid paymentId)
+        public static async Task<Payment> GetPaymentAsync(string caseId, Guid paymentId, string userName = "")
         {
             string uri = string.Format(Constants.UriPaymentGet, BaseUrl, caseId, paymentId);
 
-            Payment response = await PerformHttpCallAsync<Payment>(uri, HttpMethod.Get, null, true, HttpRequestTimeout);
+            Payment response = await PerformHttpCallAsync<Payment>(uri, HttpMethod.Get, null, true, HttpRequestTimeout, userName);
 
             return response;
         }
@@ -654,12 +717,13 @@ namespace Trustev.WebAsync
         /// Get all the Payments from a Case
         /// </summary>
         /// <param name="caseId">The Case Id of a Case which you have already posted</param>
+        /// <param name="userName">Optional: The user name, needed to support multiple creds, if only one set of creds is used this parameter is not needed</param>
         /// <returns></returns>
-        public static async Task<IList<Payment>> GetPaymentAsync(string caseId)
+        public static async Task<IList<Payment>> GetPaymentAsync(string caseId, string userName = "")
         {
             string uri = string.Format(Constants.UriPaymentsGet, BaseUrl, caseId);
 
-            IList<Payment> response = await PerformHttpCallAsync<IList<Payment>>(uri, HttpMethod.Get, null, true, HttpRequestTimeout);
+            IList<Payment> response = await PerformHttpCallAsync<IList<Payment>>(uri, HttpMethod.Get, null, true, HttpRequestTimeout, userName);
 
             return response;
         }
@@ -669,12 +733,13 @@ namespace Trustev.WebAsync
         /// </summary>
         /// <param name="caseId">The Case Id of a Case with the Transaction which you have already posted</param>
         /// <param name="transactionAddress">Your TransactionAddress which you want to post</param>
+        /// <param name="userName">Optional: The user name, needed to support multiple creds, if only one set of creds is used this parameter is not needed</param>
         /// <returns></returns>
-        public static async Task<TransactionAddress> PostTransactionAddressAsync(string caseId, TransactionAddress transactionAddress)
+        public static async Task<TransactionAddress> PostTransactionAddressAsync(string caseId, TransactionAddress transactionAddress, string userName = "")
         {
             string uri = string.Format(Constants.UriTransactionAddressPost, BaseUrl, caseId);
 
-            TransactionAddress response = await PerformHttpCallAsync<TransactionAddress>(uri, HttpMethod.Post, transactionAddress, true, HttpRequestTimeout);
+            TransactionAddress response = await PerformHttpCallAsync<TransactionAddress>(uri, HttpMethod.Post, transactionAddress, true, HttpRequestTimeout, userName);
 
             return response;
         }
@@ -685,12 +750,13 @@ namespace Trustev.WebAsync
         /// <param name="caseId">The Case Id of a Case which you have already posted</param>
         /// <param name="transactionAddress">The TransactionAddress you want to update the existing TransactionAddress to</param>
         /// <param name="transactionAddressId">The id of the TransactionAddress you want to update</param>
+        /// <param name="userName">Optional: The user name, needed to support multiple creds, if only one set of creds is used this parameter is not needed</param>
         /// <returns></returns>
-        public static async Task<TransactionAddress> UpdateTransactionAddressAsync(string caseId, TransactionAddress transactionAddress, Guid transactionAddressId)
+        public static async Task<TransactionAddress> UpdateTransactionAddressAsync(string caseId, TransactionAddress transactionAddress, Guid transactionAddressId, string userName = "")
         {
             string uri = string.Format(Constants.UriTransactionAddressUpdate, BaseUrl, caseId, transactionAddressId);
 
-            TransactionAddress response = await PerformHttpCallAsync<TransactionAddress>(uri, HttpMethod.Put, transactionAddress, true, HttpRequestTimeout);
+            TransactionAddress response = await PerformHttpCallAsync<TransactionAddress>(uri, HttpMethod.Put, transactionAddress, true, HttpRequestTimeout, userName);
 
             return response;
         }
@@ -700,12 +766,13 @@ namespace Trustev.WebAsync
         /// </summary>
         /// <param name="caseId">The Case Id of a Case with the Customer which you have already posted</param>
         /// <param name="transactionAddressId">The Id of the TransactionAddress you want to get</param>
+        /// <param name="userName">Optional: The user name, needed to support multiple creds, if only one set of creds is used this parameter is not needed</param>
         /// <returns></returns>
-        public static async Task<TransactionAddress> GetTransactionAddressAsync(string caseId, Guid transactionAddressId)
+        public static async Task<TransactionAddress> GetTransactionAddressAsync(string caseId, Guid transactionAddressId, string userName = "")
         {
             string uri = string.Format(Constants.UriTransactionAddressGet, BaseUrl, caseId, transactionAddressId);
 
-            TransactionAddress response = await PerformHttpCallAsync<TransactionAddress>(uri, HttpMethod.Get, null, true, HttpRequestTimeout);
+            TransactionAddress response = await PerformHttpCallAsync<TransactionAddress>(uri, HttpMethod.Get, null, true, HttpRequestTimeout, userName);
 
             return response;
         }
@@ -714,12 +781,13 @@ namespace Trustev.WebAsync
         /// Get a all the addresses from a Transaction on a Case
         /// </summary>
         /// <param name="caseId">The Case Id of a Case with the Transaction which you have already posted</param>
+        /// <param name="userName">Optional: The user name, needed to support multiple creds, if only one set of creds is used this parameter is not needed</param>
         /// <returns></returns>
-        public static async Task<IList<TransactionAddress>> GetTransactionAddresssesAsync(string caseId)
+        public static async Task<IList<TransactionAddress>> GetTransactionAddresssesAsync(string caseId, string userName = "")
         {
             string uri = string.Format(Constants.UriTransactionAddressesGet, BaseUrl, caseId);
 
-            IList<TransactionAddress> response = await PerformHttpCallAsync<IList<TransactionAddress>>(uri, HttpMethod.Get, null, true, HttpRequestTimeout);
+            IList<TransactionAddress> response = await PerformHttpCallAsync<IList<TransactionAddress>>(uri, HttpMethod.Get, null, true, HttpRequestTimeout, userName);
 
             return response;
         }
@@ -729,12 +797,13 @@ namespace Trustev.WebAsync
         /// </summary>
         /// <param name="caseId">The Case Id of a Case with the Transaction which you have already posted</param>
         /// <param name="transactionItem">Your TransactionItem which you want to post</param>
+        /// <param name="userName">Optional: The user name, needed to support multiple creds, if only one set of creds is used this parameter is not needed</param>
         /// <returns></returns>
-        public static async Task<TransactionItem> PostTransactionItemAsync(string caseId, TransactionItem transactionItem)
+        public static async Task<TransactionItem> PostTransactionItemAsync(string caseId, TransactionItem transactionItem, string userName = "")
         {
             string uri = string.Format(Constants.UriTransactionItemPost, BaseUrl, caseId);
 
-            TransactionItem response = await PerformHttpCallAsync<TransactionItem>(uri, HttpMethod.Post, transactionItem, true, HttpRequestTimeout);
+            TransactionItem response = await PerformHttpCallAsync<TransactionItem>(uri, HttpMethod.Post, transactionItem, true, HttpRequestTimeout, userName);
 
             return response;
         }
@@ -745,12 +814,13 @@ namespace Trustev.WebAsync
         /// <param name="caseId">The Case Id of a Case which you have already posted</param>
         /// <param name="transactionItem">The TransactionAddress you want to update the existing TransactionItem to</param>
         /// <param name="transactionItemId">The id of the TransactionItem you want to update</param>
+        /// <param name="userName">Optional: The user name, needed to support multiple creds, if only one set of creds is used this parameter is not needed</param>
         /// <returns></returns>
-        public static async Task<TransactionItem> UpdateTransactionItemAsync(string caseId, TransactionItem transactionItem, Guid transactionItemId)
+        public static async Task<TransactionItem> UpdateTransactionItemAsync(string caseId, TransactionItem transactionItem, Guid transactionItemId, string userName = "")
         {
             string uri = string.Format(Constants.UriTransactionItemUpdate, BaseUrl, caseId, transactionItemId);
 
-            TransactionItem response = await PerformHttpCallAsync<TransactionItem>(uri, HttpMethod.Put, transactionItem, true, HttpRequestTimeout);
+            TransactionItem response = await PerformHttpCallAsync<TransactionItem>(uri, HttpMethod.Put, transactionItem, true, HttpRequestTimeout, userName);
 
             return response;
         }
@@ -760,12 +830,13 @@ namespace Trustev.WebAsync
         /// </summary>
         /// <param name="caseId">The Case Id of a Case with the Customer which you have already posted</param>
         /// <param name="transactionItemId">The Id of the TransactionItem you want to get</param>
+        /// <param name="userName">Optional: The user name, needed to support multiple creds, if only one set of creds is used this parameter is not needed</param>
         /// <returns></returns>
-        public static async Task<TransactionItem> GetTransactionItemAsync(string caseId, Guid transactionItemId)
+        public static async Task<TransactionItem> GetTransactionItemAsync(string caseId, Guid transactionItemId, string userName = "")
         {
             string uri = string.Format(Constants.UriTransactionItemGet, BaseUrl, caseId, transactionItemId);
 
-            TransactionItem response = await PerformHttpCallAsync<TransactionItem>(uri, HttpMethod.Get, null, true, HttpRequestTimeout);
+            TransactionItem response = await PerformHttpCallAsync<TransactionItem>(uri, HttpMethod.Get, null, true, HttpRequestTimeout, userName);
 
             return response;
         }
@@ -774,12 +845,13 @@ namespace Trustev.WebAsync
         /// Get a all the TransactionItems from a Transaction on a Case
         /// </summary>
         /// <param name="caseId">The Case Id of a Case with the Transaction which you have already posted</param>
+        /// <param name="userName">Optional: The user name, needed to support multiple creds, if only one set of creds is used this parameter is not needed</param>
         /// <returns></returns>
-        public static async Task<IList<TransactionItem>> GetTransactionItemsAsync(string caseId)
+        public static async Task<IList<TransactionItem>> GetTransactionItemsAsync(string caseId, string userName = "")
         {
             string uri = string.Format(Constants.UriTransactionItemsGet, BaseUrl, caseId);
 
-            IList<TransactionItem> response = await PerformHttpCallAsync<IList<TransactionItem>>(uri, HttpMethod.Get, null, true, HttpRequestTimeout);
+            IList<TransactionItem> response = await PerformHttpCallAsync<IList<TransactionItem>>(uri, HttpMethod.Get, null, true, HttpRequestTimeout, userName);
 
             return response;
         }
@@ -789,12 +861,13 @@ namespace Trustev.WebAsync
         /// </summary>
         /// <param name="caseId">The Case Id of a Case</param>
         /// <param name="kbaResult">Your KBA Answers which you want to post</param>
+        /// <param name="userName">Optional: The user name, needed to support multiple creds, if only one set of creds is used this parameter is not needed</param>
         /// <returns></returns>
-        public static async Task<KBAResult> PostKBAResultAsync(string caseId, KBAResult kbaResult)
+        public static async Task<KBAResult> PostKBAResultAsync(string caseId, KBAResult kbaResult, string userName = "")
         {
             string uri = string.Format(Constants.UriKBAResultPost, BaseUrl, caseId);
 
-            KBAResult response = await PerformHttpCallAsync<KBAResult>(uri, HttpMethod.Post, kbaResult, true, HttpRequestTimeout);
+            KBAResult response = await PerformHttpCallAsync<KBAResult>(uri, HttpMethod.Post, kbaResult, true, HttpRequestTimeout, userName);
 
             return response;
         }
@@ -809,7 +882,7 @@ namespace Trustev.WebAsync
         /// <param name="isAuthenticationNeeded">Does this api call require the X-Authorization header</param>
         /// <param name="requestTimeout">The timeout value of this http request in milliseconds</param>
         /// <returns></returns>
-        private static async Task<T> PerformHttpCallAsync<T>(string uri, HttpMethod method, object entity, bool isAuthenticationNeeded = true, int requestTimeout = 15000)
+        private static async Task<T> PerformHttpCallAsync<T>(string uri, HttpMethod method, object entity, bool isAuthenticationNeeded = true, int requestTimeout = 15000, string userName = "")
         {
             JsonSerializerSettings jss = new JsonSerializerSettings();
             DefaultContractResolver dcr = new PrivateSetterContractResolver();
@@ -819,15 +892,19 @@ namespace Trustev.WebAsync
 
             if (isAuthenticationNeeded)
             {
+                var credential = GetCredential(userName);
                 if (uri.Contains("/session"))
                 {
-                    if (string.IsNullOrEmpty(PublicKey))
+                    if (string.IsNullOrEmpty(credential.PublicKey))
                         throw new TrustevGeneralException("You need to set your public key if you want to post a Session. This can be done via the SetUp method");
 
-                    client.DefaultRequestHeaders.Add("X-PublicKey", PublicKey);
+                    client.DefaultRequestHeaders.Add("X-PublicKey", credential.PublicKey);
                 }
                 else
-                    client.DefaultRequestHeaders.Add("X-Authorization", UserName + " " + await GetTokenAsync());
+                {
+                    var token = await GetTokenAsync(credential.UserName);
+                    client.DefaultRequestHeaders.Add("X-Authorization", credential.UserName + " " + token);
+                }
             }
 
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls11 | SecurityProtocolType.Tls;
@@ -883,37 +960,44 @@ namespace Trustev.WebAsync
         /// </summary>
         /// <param name="regenerateToken"></param>
         /// <returns></returns>
-        public static async Task<string> GetTokenAsync()
+        public static async Task<string> GetTokenAsync(string userName = "")
         {
+            var authenticationToken = GetApiToken(userName);
+
             if (!RegenerateTokenOnEachRequest)
             {
-                if (string.IsNullOrEmpty(ApiToken) || ExpireAt == null || ExpireAt.Value <= DateTime.UtcNow)
+                if (authenticationToken == null || string.IsNullOrEmpty(authenticationToken.APIToken) || authenticationToken.ExpireAt == null || authenticationToken.ExpireAt < DateTime.UtcNow)
                 {
-                    await SetTokenAsync();
+                    await SetTokenAsync(userName);
                 }
             }
             else
             {
-                await SetTokenAsync();
+                await SetTokenAsync(userName);
             }
-            return ApiToken;
+
+            authenticationToken = GetApiToken(userName);
+
+            return authenticationToken.APIToken;
         }
 
         /// <summary>
         /// Sets new APIToken and ExpiryDate on each call
         /// </summary>
         /// <returns></returns>
-        public static async Task SetTokenAsync()
+        private static async Task SetTokenAsync(string userName)
         {
-            CheckCredentials();
+            var credential = GetCredential(userName);
+
+            CheckCredentials(credential);
 
             DateTime currentTime = DateTime.UtcNow;
 
             TokenRequest requestObject = new TokenRequest()
             {
-                UserName = UserName,
-                PasswordHash = PasswordHashHelper(Password, Secret, currentTime),
-                UserNameHash = UserNameHashHelper(UserName, Secret, currentTime),
+                UserName = credential.UserName,
+                PasswordHash = PasswordHashHelper(credential.Password, credential.Secret, currentTime),
+                UserNameHash = UserNameHashHelper(credential.UserName, credential.Secret, currentTime),
                 TimeStamp = currentTime.ToString("o")
             };
 
@@ -921,18 +1005,18 @@ namespace Trustev.WebAsync
 
             string uri = string.Format("{0}/token", BaseUrl);
 
-            TokenResponse response = await PerformHttpCallAsync<TokenResponse>(uri, HttpMethod.Post, requestJson,
-                false, HttpRequestTimeout);
-            CachedToken = response;
+            var response = await PerformHttpCallAsync<TokenResponse>(uri, HttpMethod.Post, requestJson, false, HttpRequestTimeout, userName);
+
+            AddOrUpdateToken(userName, response);
         }
 
         #region Private Methods
         /// <summary>
         /// Check that the user has set the TrustevClient Credentials correctly
         /// </summary>
-        private static void CheckCredentials()
+        private static void CheckCredentials(SiteCredential credential)
         {
-            if (string.IsNullOrEmpty(UserName) || string.IsNullOrEmpty(Secret) || string.IsNullOrEmpty(Password))
+            if (credential == null || string.IsNullOrEmpty(credential.UserName) || string.IsNullOrEmpty(credential.Secret) || string.IsNullOrEmpty(credential.Password))
             {
                 throw new TrustevGeneralException("You have not set your TrustevClient credentials correctly. You need to set these by calling the SetUp method on the TrustevClient Class providing your UserName, Password and Secret as the paramters before you can access the TrustevClient API");
             }
@@ -989,10 +1073,22 @@ namespace Trustev.WebAsync
             return result;
         }
 
+        private static T DeepClone<T>(T obj)
+        {
+            using (var ms = new MemoryStream())
+            {
+                var formatter = new BinaryFormatter();
+                formatter.Serialize(ms, obj);
+                ms.Position = 0;
+
+                return (T)formatter.Deserialize(ms);
+            }
+        }
+
         /// <summary>
         /// TrustevClient Token Response Object
         /// </summary>
-        private class TokenResponse
+        public class TokenResponse
         {
             public string APIToken { get; set; }
 

@@ -9,10 +9,12 @@ namespace Tests.AsyncTests
 {
     public class TestBase
     {
+        protected string firstUserName;
+
         [TestInitialize]
         public void InitializeTest()
         {
-            string userName = ConfigurationManager.AppSettings["UserName"];
+            firstUserName = ConfigurationManager.AppSettings["UserName"];
             string password = ConfigurationManager.AppSettings["Password"];
             string secret = ConfigurationManager.AppSettings["Secret"];
             string publicKey = ConfigurationManager.AppSettings["PublicKey"];
@@ -22,11 +24,11 @@ namespace Tests.AsyncTests
             {
                 Enums.BaseUrl baseURL;
                 Enum.TryParse(ConfigurationManager.AppSettings["BaseURL"], out baseURL);
-                ApiClient.SetUp(userName, password, secret, publicKey, baseURL);
+                ApiClient.SetUp(firstUserName, password, secret, publicKey, baseURL);
             }
             else
             {
-                ApiClient.SetUp(userName, password, secret, publicKey, altUrl);
+                ApiClient.SetUp(firstUserName, password, secret, publicKey, altUrl);
             }
         }
     }
