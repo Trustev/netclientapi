@@ -166,19 +166,21 @@ This is simple version of the Trustev Integration and involves 4 simple steps:
 ```c#
 
 // 1. Set-Up the Trustev API Client with your user credentials, and include your location details 
-//	userName is Optional: The user name, needed to support multiple credentials, if only one set of credentials is used this parameter is not needed
 // - i.e. US (Enums.BaseUrl.US) or EU (Enums.BaseUrl.EU)
 ApiClient.SetUp(userName, password, secret, baseURL);
 
 
 // 2. Create your case.
 // You will need two bits of information for this step
-//		userName : This is optional - The user name, needed to support multiple credentials, if only one set of credentials is used this parameter is not needed
+//		userName : This is optional - The user name, needed to support multiple credentials,
+//      if only one set of credentials is used this parameter is not needed
 //
 // 		SessionId : This is the SessionId that you have received from the Trustev JavaScript 
 //					and transferred server-side
 // 		CaseNumber : This is a number that you use to uniquely identify this case. It must
 //					 be unique.
+Case kase = new Case(sessionId, caseNumber);
+
 Case kase = new Case(sessionId, caseNumber, userName);
 
 // Now add any further information you have. The more you give us, the more accurate 
@@ -191,12 +193,22 @@ kase.Customer = new Customer()
 
 
 // 3. Post this Case to the Trustev API
-//	userName is Optional: The user name, needed to support multiple credentials, if only one set of credentials is used this parameter is not needed
+
+Case returnCase = ApiClient.PostCase(kase);
+
+//	userName is Optional: The user name, needed to support multiple credentials, 
+//  if only one set of credentials is used this parameter is not needed
+
 Case returnCase = ApiClient.PostCase(kase, userName);
 
 
 // 4. You can now get your Decision from Trustev base on the case you have given us!
-//	userName is Optional: The user name, needed to support multiple credentials, if only one set of credentials is used this parameter is not needed
+
+Decision decision = ApiClient.GetDecision(returnCase.Id);
+
+//	userName is Optional: The user name, needed to support multiple credentials,
+//  if only one set of credentials is used this parameter is not needed
+
 Decision decision = ApiClient.GetDecision(returnCase.Id, userName);
 
 
