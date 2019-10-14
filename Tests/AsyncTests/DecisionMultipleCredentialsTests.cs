@@ -22,16 +22,13 @@ namespace Tests.AsyncTests
         public void InitializeTestMultipleCreds()
         {
             InitializeTest();
+            // Other* represents another set of credentials for a different merchant
             otherUserName = ConfigurationManager.AppSettings["OtherUserName"];
             string otherPassword = ConfigurationManager.AppSettings["OtherPassword"];
             string otherSecret = ConfigurationManager.AppSettings["OtherSecret"];
             string otherPublicKey = ConfigurationManager.AppSettings["OtherPublicKey"];
-            string altUrl = ConfigurationManager.AppSettings["AltUrl"];
-            string url = ConfigurationManager.AppSettings["BaseURL"];
-
             if (string.IsNullOrEmpty(altUrl))
             {
-                Enum.TryParse(url, out Enums.BaseUrl baseURL);
                 ApiClient.SetUp(otherUserName, otherPassword, otherSecret, otherPublicKey, baseURL);
             }
             else

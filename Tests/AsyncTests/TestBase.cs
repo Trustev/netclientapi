@@ -11,6 +11,10 @@ namespace Tests.AsyncTests
     {
         protected string firstUserName;
 
+        protected string altUrl;
+
+        protected Enums.BaseUrl baseURL;
+
         [TestInitialize]
         public void InitializeTest()
         {
@@ -18,11 +22,10 @@ namespace Tests.AsyncTests
             string password = ConfigurationManager.AppSettings["Password"];
             string secret = ConfigurationManager.AppSettings["Secret"];
             string publicKey = ConfigurationManager.AppSettings["PublicKey"];
-            string altUrl = ConfigurationManager.AppSettings["AltUrl"];
+            altUrl = ConfigurationManager.AppSettings["AltUrl"];
 
             if (string.IsNullOrEmpty(altUrl))
             {
-                Enums.BaseUrl baseURL;
                 Enum.TryParse(ConfigurationManager.AppSettings["BaseURL"], out baseURL);
                 ApiClient.SetUp(firstUserName, password, secret, publicKey, baseURL);
             }
