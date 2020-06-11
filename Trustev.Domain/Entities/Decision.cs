@@ -51,5 +51,10 @@ namespace Trustev.Domain.Entities
         /// The Trustev Comment that trustev has added to this decision.
         /// </summary>
         public string Comment { get; set; }
+
+        /// <summary>
+        /// Field indicating the platform version
+        /// </summary>
+        public string PlatformVersion { get; set; }
     }
 }
