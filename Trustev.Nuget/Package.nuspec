@@ -2,7 +2,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2011/08/nuspec.xsd">
     <metadata>
         <id>Trustev</id>
-        <version>1.1.1</version>
+        <version>1.1.2</version>
         <title>Trustev Api Client</title>
         <authors>Trustev</authors>
         <owners>Trustev</owners>
@@ -11,8 +11,8 @@
         <iconUrl>https://app.trustev.com/assets/img/apple-icon-144.png</iconUrl>
         <requireLicenseAcceptance>false</requireLicenseAcceptance>
         <description>Core functions in C# for applications to use Trustev Platform, This is the Trustev Client which provides a set of classes and methods which can be used to integrate to the Trustev Platform.</description>
-        <releaseNotes>Update to Add Support for multiple site credentials.</releaseNotes>
-        <copyright>Copyright 2019</copyright>
+        <releaseNotes>Added Id-Vision Unified Platform Version.</releaseNotes>
+        <copyright>Copyright 2020</copyright>
         <tags>Trustev trustev api client</tags>
         <dependencies>
             <dependency id="Newtonsoft.Json" version="7.0.1" />
