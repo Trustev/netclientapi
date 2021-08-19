@@ -1,3 +1,9 @@
+:no_entry: [DEPRECATED]
+
+This library is deprecated and you should use the web API.
+
+http://www.trustev.com/developers
+
 ![alt text](https://app.trustev.com/assets/img/apple-icon-144.png)
 
 
